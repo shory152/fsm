@@ -1,4 +1,4 @@
-package fsm
+package test
 
 import (
 	"bytes"
@@ -6,10 +6,12 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/shory152/fsm"
 )
 
 const (
-	S0 State = iota
+	S0 fsm.State = iota
 	S1
 	S2
 	S3
@@ -17,7 +19,7 @@ const (
 	S5
 )
 const (
-	E0 Event = iota
+	E0 fsm.Event = iota
 	E1
 	E2
 	E3
@@ -25,139 +27,150 @@ const (
 	E5
 )
 
+// S0 -> ... -> S3
+//
+//    | S0 | S1 | S2 | S3 | S4
+//----+----+----+----+----+----
+// S0 |    | E1 | E2 |    |
+// S1 |    |    |    | E3 | E4
+// S2 |    | E1 |    | E3 | E4
+// S3 |    |    |    |    |
+// S4 |    |    |    | E3 |
+//
 func TestAutoFSM(t *testing.T) {
-	fsm := NewAutoFSM(S0)
-	s0 := fsm.ConfigState(S0)
+	sm := fsm.NewAutoFSM(S0)
+	defer sm.Close()
+
+	s0 := sm.ConfigState(S0)
 	s0.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S0")
 		}))
 	s0.OnExit(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("exit S0")
 		}))
 	s0.Accept(E1, S1)
 	s0.Accept(E2, S2)
 
-	s1 := fsm.ConfigState(S1)
+	s1 := sm.ConfigState(S1)
 	s1.Accept(E3, S3)
 	s1.Accept(E4, S4)
 	s1.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S1")
-			fsm.Feed(E3)
+			sm.Feed(E3)
 		}))
-	s1.OnEnterFrom(S2, ActionFunc(func() {
+	s1.OnEnterFrom(S2, fsm.ActionFunc(func() {
 		fmt.Println("enter S1 from S2")
-		fsm.Feed(E4)
+		sm.Feed(E4)
 	}))
 
-	s3 := fsm.ConfigState(S3)
+	s3 := sm.ConfigState(S3)
 	s3.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S3")
 			fmt.Println("stop")
-			fsm.Stop()
+			sm.Stop()
 		}))
-	s3.OnEnterFrom(S4, ActionFunc(func() {
+	s3.OnEnterFrom(S4, fsm.ActionFunc(func() {
 		fmt.Println("enter S3 from S4")
 		fmt.Println("stop")
-		fsm.Stop()
+		sm.Stop()
 	}))
 
-	s2 := fsm.ConfigState(S2)
+	s2 := sm.ConfigState(S2)
 	s2.Accept(E4, S4)
 	s2.Accept(E3, S3)
 	s2.Accept(E1, S1)
 	s2.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S2")
 			if rand.Int()%3 == 0 {
-				fsm.Feed(E4)
+				sm.Feed(E4)
 			} else if rand.Int()%3 == 1 {
-				fsm.Feed(E3)
+				sm.Feed(E3)
 			} else {
-				fsm.Feed(E1)
+				sm.Feed(E1)
 			}
 		}))
 
-	s4 := fsm.ConfigState(S4)
+	s4 := sm.ConfigState(S4)
 	s4.Accept(E3, S3)
 	s4.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S4")
-			fsm.Feed(E3)
+			sm.Feed(E3)
 		}))
-	s4.OnEnterFrom(S1, ActionFunc(func() {
+	s4.OnEnterFrom(S1, fsm.ActionFunc(func() {
 		fmt.Println("enter S4 from S1")
-		fsm.Feed(E3)
+		sm.Feed(E3)
 	}))
 
 	rand.Seed(time.Now().Unix())
-	fsm.Start(E1)
+	sm.Start(E1)
 }
 
 func TestStepSFM(t *testing.T) {
 	type job struct {
-		fsm StepFSM
-		nev Event
+		fsm fsm.StepFSM
+		nev fsm.Event
 	}
 
 	jobQ := make(chan job, 1)
 
 	var j job
-	j.fsm = NewStepFSM(S0)
+	sm := fsm.NewStepFSM(S0)
+	defer sm.Close()
 
-	fsm := j.fsm
+	j.fsm = sm
 
-	s0 := fsm.ConfigState(S0)
+	s0 := sm.ConfigState(S0)
 	s0.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S0") // never call S0.OnEnter Action
 		}))
 	s0.OnExit(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("exit S0")
 		}))
 	s0.Accept(E1, S1)
 	s0.Accept(E2, S2)
 
-	s1 := fsm.ConfigState(S1)
+	s1 := sm.ConfigState(S1)
 	s1.Accept(E3, S3)
 	s1.Accept(E4, S4)
 	s1.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S1")
 			j.nev = E3
 			jobQ <- j
 		}))
-	s1.OnEnterFrom(S2, ActionFunc(func() {
+	s1.OnEnterFrom(S2, fsm.ActionFunc(func() {
 		fmt.Println("enter S1 from S2")
 		j.nev = E4
 		jobQ <- j
 	}))
 
-	s3 := fsm.ConfigState(S3)
+	s3 := sm.ConfigState(S3)
 	s3.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S3")
 			fmt.Println("stop")
-			fsm.Close()
 			close(jobQ)
 		}))
-	s3.OnEnterFrom(S4, ActionFunc(func() {
+	s3.OnEnterFrom(S4, fsm.ActionFunc(func() {
 		fmt.Println("enter S3 from S4")
 		fmt.Println("stop")
-		fsm.Close()
 		close(jobQ)
 	}))
 
-	s2 := fsm.ConfigState(S2)
+	s2 := sm.ConfigState(S2)
 	s2.Accept(E4, S4)
 	s2.Accept(E3, S3)
 	s2.Accept(E1, S1)
 	s2.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S2")
 			if rand.Int()%3 == 0 {
 				//fsm.Feed(E4)
@@ -174,16 +187,16 @@ func TestStepSFM(t *testing.T) {
 			}
 		}))
 
-	s4 := fsm.ConfigState(S4)
+	s4 := sm.ConfigState(S4)
 	s4.Accept(E3, S3)
 	s4.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S4")
 			//fsm.Feed(E3)
 			j.nev = E3
 			jobQ <- j
 		}))
-	s4.OnEnterFrom(S1, ActionFunc(func() {
+	s4.OnEnterFrom(S1, fsm.ActionFunc(func() {
 		fmt.Println("enter S4 from S1")
 		//fsm.Feed(E3)
 		j.nev = E3
@@ -222,156 +235,156 @@ func fsmparsexml(xml string, chToken chan<- word) {
 	var val bytes.Buffer
 
 	const (
-		_  State = iota
-		S0       // start
-		S1       // recv '<'
-		S2       // recv '</'
-		S3       // recv '<otehr'
-		S4       // recv '>'
-		S5       // >other
-		S6       // end
-		S7       // err
+		_  fsm.State = iota
+		S0           // start
+		S1           // recv '<'
+		S2           // recv '</'
+		S3           // recv '<otehr'
+		S4           // recv '>'
+		S5           // >other
+		S6           // end
+		S7           // err
 	)
 	const (
-		_  Event = iota
-		E1       // blank
-		E2       // '<'
-		E3       // '/'
-		E4       // '>'
-		E5       // other char
-		E6       // \t \n \r
-		E7       // EOF
+		_  fsm.Event = iota
+		E1           // blank
+		E2           // '<'
+		E3           // '/'
+		E4           // '>'
+		E5           // other char
+		E6           // \t \n \r
+		E7           // EOF
 	)
 
-	fsm := NewAutoFSM(S0)
-	defer fsm.Close()
+	sm := fsm.NewAutoFSM(S0)
+	defer sm.Close()
 
-	s0 := fsm.ConfigState(S0)
+	s0 := sm.ConfigState(S0)
 	s0.Accept(E1, S0)
 	s0.Accept(E2, S1)
 	s0.Accept(E7, S6)
 	s0.Accept(E5, S7)
-	s0.OnEnter(ActionFunc(func() {
+	s0.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := <-chChar; !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '<' {
-			fsm.Feed(E2)
+			sm.Feed(E2)
 		} else if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-			fsm.Feed(E1)
+			sm.Feed(E1)
 		} else {
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s1 := fsm.ConfigState(S1)
+	s1 := sm.ConfigState(S1)
 	s1.Accept(E3, S2)
 	s1.Accept(E5, S3)
 	s1.Accept(E7, S7)
-	s1.OnEnter(ActionFunc(func() {
+	s1.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := <-chChar; !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '/' {
-			fsm.Feed(E3)
+			sm.Feed(E3)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s2 := fsm.ConfigState(S2)
+	s2 := sm.ConfigState(S2)
 	s2.Accept(E5, S2)
 	s2.Accept(E4, S4)
 	s2.Accept(E7, S7)
-	s2.OnEnter(ActionFunc(func() {
+	s2.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := <-chChar; !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '>' {
 			wd := word{}
 			wd.typ = WORD_TAG_CLOSE
 			wd.value = val.String()
 			chToken <- wd
 			val.Reset()
-			fsm.Feed(E4)
+			sm.Feed(E4)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s3 := fsm.ConfigState(S3)
+	s3 := sm.ConfigState(S3)
 	s3.Accept(E7, S7)
 	s3.Accept(E5, S3)
 	s3.Accept(E4, S4)
-	s3.OnEnter(ActionFunc(func() {
+	s3.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := <-chChar; !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '>' {
 			wd := word{}
 			wd.typ = WORD_TAG_OPEN
 			wd.value = val.String()
 			chToken <- wd
 			val.Reset()
-			fsm.Feed(E4)
+			sm.Feed(E4)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s4 := fsm.ConfigState(S4)
+	s4 := sm.ConfigState(S4)
 	s4.Accept(E7, S6)
 	s4.Accept(E5, S5)
 	s4.Accept(E6, S4)
 	s4.Accept(E2, S1)
-	s4.OnEnter(ActionFunc(func() {
+	s4.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := <-chChar; !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '<' {
-			fsm.Feed(E2)
+			sm.Feed(E2)
 		} else if c == '\n' || c == '\r' || c == '\t' {
-			fsm.Feed(E6)
+			sm.Feed(E6)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s5 := fsm.ConfigState(S5)
+	s5 := sm.ConfigState(S5)
 	s5.Accept(E5, S5)
 	s5.Accept(E2, S1)
 	s5.Accept(E7, S7)
 	s5.Accept(E6, S7)
-	s5.OnEnter(ActionFunc(func() {
+	s5.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := <-chChar; !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '<' {
 			wd := word{}
 			wd.typ = WORD_VAL
 			wd.value = val.String()
 			chToken <- wd
 			val.Reset()
-			fsm.Feed(E2)
+			sm.Feed(E2)
 		} else if c == '\n' || c == '\r' || c == '\t' {
-			fsm.Feed(E6)
+			sm.Feed(E6)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s6 := fsm.ConfigState(S6)
-	s6.OnEnter(ActionFunc(func() {
+	s6 := sm.ConfigState(S6)
+	s6.OnEnter(fsm.ActionFunc(func() {
 		//fmt.Println("parse OK")
-		fsm.Stop()
+		sm.Stop()
 	}))
 
-	s7 := fsm.ConfigState(S7)
-	s7.OnEnter(ActionFunc(func() {
+	s7 := sm.ConfigState(S7)
+	s7.OnEnter(fsm.ActionFunc(func() {
 		fmt.Println("parse error")
-		fsm.Stop()
+		sm.Stop()
 	}))
 
-	fsm.Start(E1)
+	sm.Start(E1)
 
 	close(chToken)
 }
@@ -393,69 +406,69 @@ func fsmparsexml2(xml string, out []*word) {
 	var val bytes.Buffer
 
 	const (
-		_  State = iota
-		S0       // start
-		S1       // recv '<'
-		S2       // recv '</'
-		S3       // recv '<otehr'
-		S4       // recv '>'
-		S5       // >other
-		S6       // end
-		S7       // err
+		_  fsm.State = iota
+		S0           // start
+		S1           // recv '<'
+		S2           // recv '</'
+		S3           // recv '<otehr'
+		S4           // recv '>'
+		S5           // >other
+		S6           // end
+		S7           // err
 	)
 	const (
-		_  Event = iota
-		E1       // blank
-		E2       // '<'
-		E3       // '/'
-		E4       // '>'
-		E5       // other char
-		E6       // \t \n \r
-		E7       // EOF
+		_  fsm.Event = iota
+		E1           // blank
+		E2           // '<'
+		E3           // '/'
+		E4           // '>'
+		E5           // other char
+		E6           // \t \n \r
+		E7           // EOF
 	)
 
-	fsm := NewAutoFSM(S0)
-	defer fsm.Close()
+	sm := fsm.NewAutoFSM(S0)
+	defer sm.Close()
 
-	s0 := fsm.ConfigState(S0)
+	s0 := sm.ConfigState(S0)
 	s0.Accept(E1, S0)
 	s0.Accept(E2, S1)
 	s0.Accept(E7, S6)
 	s0.Accept(E5, S7)
-	s0.OnEnter(ActionFunc(func() {
+	s0.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := getchar(); !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '<' {
-			fsm.Feed(E2)
+			sm.Feed(E2)
 		} else if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-			fsm.Feed(E1)
+			sm.Feed(E1)
 		} else {
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s1 := fsm.ConfigState(S1)
+	s1 := sm.ConfigState(S1)
 	s1.Accept(E3, S2)
 	s1.Accept(E5, S3)
 	s1.Accept(E7, S7)
-	s1.OnEnter(ActionFunc(func() {
+	s1.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := getchar(); !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '/' {
-			fsm.Feed(E3)
+			sm.Feed(E3)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s2 := fsm.ConfigState(S2)
+	s2 := sm.ConfigState(S2)
 	s2.Accept(E5, S2)
 	s2.Accept(E4, S4)
 	s2.Accept(E7, S7)
-	s2.OnEnter(ActionFunc(func() {
+	s2.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := getchar(); !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '>' {
 			wd := word{}
 			wd.typ = WORD_TAG_CLOSE
@@ -463,20 +476,20 @@ func fsmparsexml2(xml string, out []*word) {
 			out[i] = &wd
 			i++
 			val.Reset()
-			fsm.Feed(E4)
+			sm.Feed(E4)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s3 := fsm.ConfigState(S3)
+	s3 := sm.ConfigState(S3)
 	s3.Accept(E7, S7)
 	s3.Accept(E5, S3)
 	s3.Accept(E4, S4)
-	s3.OnEnter(ActionFunc(func() {
+	s3.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := getchar(); !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '>' {
 			wd := word{}
 			wd.typ = WORD_TAG_OPEN
@@ -484,39 +497,39 @@ func fsmparsexml2(xml string, out []*word) {
 			out[i] = &wd
 			i++
 			val.Reset()
-			fsm.Feed(E4)
+			sm.Feed(E4)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s4 := fsm.ConfigState(S4)
+	s4 := sm.ConfigState(S4)
 	s4.Accept(E7, S6)
 	s4.Accept(E5, S5)
 	s4.Accept(E6, S4)
 	s4.Accept(E2, S1)
-	s4.OnEnter(ActionFunc(func() {
+	s4.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := getchar(); !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '<' {
-			fsm.Feed(E2)
+			sm.Feed(E2)
 		} else if c == '\n' || c == '\r' || c == '\t' {
-			fsm.Feed(E6)
+			sm.Feed(E6)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s5 := fsm.ConfigState(S5)
+	s5 := sm.ConfigState(S5)
 	s5.Accept(E5, S5)
 	s5.Accept(E2, S1)
 	s5.Accept(E7, S7)
 	s5.Accept(E6, S7)
-	s5.OnEnter(ActionFunc(func() {
+	s5.OnEnter(fsm.ActionFunc(func() {
 		if c, ok := getchar(); !ok {
-			fsm.Feed(E7)
+			sm.Feed(E7)
 		} else if c == '<' {
 			wd := word{}
 			wd.typ = WORD_VAL
@@ -524,28 +537,28 @@ func fsmparsexml2(xml string, out []*word) {
 			out[i] = &wd
 			i++
 			val.Reset()
-			fsm.Feed(E2)
+			sm.Feed(E2)
 		} else if c == '\n' || c == '\r' || c == '\t' {
-			fsm.Feed(E6)
+			sm.Feed(E6)
 		} else {
 			val.WriteRune(c)
-			fsm.Feed(E5)
+			sm.Feed(E5)
 		}
 	}))
 
-	s6 := fsm.ConfigState(S6)
-	s6.OnEnter(ActionFunc(func() {
+	s6 := sm.ConfigState(S6)
+	s6.OnEnter(fsm.ActionFunc(func() {
 		//fmt.Println("parse OK")
-		fsm.Stop()
+		sm.Stop()
 	}))
 
-	s7 := fsm.ConfigState(S7)
-	s7.OnEnter(ActionFunc(func() {
+	s7 := sm.ConfigState(S7)
+	s7.OnEnter(fsm.ActionFunc(func() {
 		fmt.Println("parse error")
-		fsm.Stop()
+		sm.Stop()
 	}))
 
-	fsm.Start(E1)
+	sm.Start(E1)
 
 }
 

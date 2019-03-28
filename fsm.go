@@ -75,17 +75,48 @@ type StepFSM interface {
 
 // fsm which receive the first event, then run automatically.
 type AutoFSM interface {
-	ConfigState(State) ConfigState
-	Feed(Event)
-	Start(Event)
+	ConfigState(s State) ConfigState
+	Feed(next Event)
+	Start(start Event)
 	Stop()
+	Pause(next Event)
+	Resume()
 	Close()
 }
 
 type stateMachine struct {
-	chEvent      chan Event
+	flag         uint32
+	nextEvent    Event
 	currentState State
 	states       map[State]*interState
+}
+
+const (
+	fsm_flag_auto uint32 = 1 << iota
+	fsm_flag_step
+	fsm_flag_running
+	fsm_flag_pause
+	fsm_flag_stopped
+	fsm_flag_nextev
+)
+
+func (fsm *stateMachine) isAutoFsm() bool {
+	return fsm.flag&fsm_flag_auto > 0
+}
+func (fsm *stateMachine) isStepFsm() bool {
+	return fsm.flag&fsm_flag_step > 0
+}
+func (fsm *stateMachine) isRunning() bool {
+	return fsm.flag&fsm_flag_running > 0
+}
+func (fsm *stateMachine) isStopped() bool {
+	return fsm.flag&fsm_flag_stopped > 0
+}
+func (fsm *stateMachine) isPaused() bool {
+	return fsm.flag&fsm_flag_pause > 0
+}
+func (fsm *stateMachine) isSetNextEv() bool {
+	return fsm.flag&fsm_flag_nextev > 0
 }
 
 func newStateMachine(startState State) *stateMachine {
@@ -97,12 +128,14 @@ func newStateMachine(startState State) *stateMachine {
 }
 
 func NewStepFSM(startState State) StepFSM {
-	return newStateMachine(startState)
+	fsm := newStateMachine(startState)
+	fsm.flag |= fsm_flag_step
+	return fsm
 }
 
 func NewAutoFSM(startState State) AutoFSM {
 	fsm := newStateMachine(startState)
-	fsm.chEvent = make(chan Event, 1)
+	fsm.flag |= fsm_flag_auto
 	return fsm
 }
 
@@ -143,30 +176,66 @@ func (fsm *stateMachine) Step(ev Event) {
 	}
 }
 
+func (fsm *stateMachine) autoRun() {
+	for fsm.isSetNextEv() {
+		fsm.flag &= ^fsm_flag_nextev
+		fsm.Step(fsm.nextEvent)
+		if fsm.isPaused() || fsm.isStopped() {
+			break
+		}
+	}
+}
+
 // auto run fsm
 func (fsm *stateMachine) Start(startEv Event) {
-	if fsm.chEvent == nil {
-		panic("FSM has not initialized")
+
+	if fsm.isStopped() {
+		panic("FSM has been stopped")
+	}
+	if fsm.isRunning() {
+		panic("FSM has started")
 	}
 
-	fsm.chEvent <- startEv
-
-	for ev := range fsm.chEvent {
-		fsm.Step(ev)
-	}
+	fsm.flag |= fsm_flag_running
+	fsm.flag &= ^fsm_flag_pause
+	fsm.Feed(startEv)
+	fsm.autoRun()
 }
 
 // feed event to fsm for auto run next step
 func (fsm *stateMachine) Feed(e Event) {
-	fsm.chEvent <- e
+	fsm.nextEvent = e
+	fsm.flag |= fsm_flag_nextev
 }
 
 // stop fsm from auto run
 func (fsm *stateMachine) Stop() {
-	if fsm.chEvent != nil {
-		close(fsm.chEvent)
-		fsm.chEvent = nil
+	fsm.flag &= ^fsm_flag_running
+	fsm.flag |= fsm_flag_stopped
+}
+
+// pause fsm from auto run
+func (fsm *stateMachine) Pause(next Event) {
+	fsm.flag &= ^fsm_flag_running
+	fsm.flag |= fsm_flag_pause
+	fsm.Feed(next)
+}
+
+// resume fsm
+func (fsm *stateMachine) Resume() {
+	if fsm.isStopped() {
+		panic("FSM has been stopped")
 	}
+	if fsm.isRunning() {
+		panic("FSM has started")
+	}
+	if !fsm.isPaused() {
+		panic("FSM has not paused")
+	}
+
+	fsm.flag &= ^fsm_flag_pause
+	fsm.flag |= fsm_flag_running
+	fsm.autoRun()
 }
 
 func (fsm *stateMachine) Close() {

@@ -23,43 +23,49 @@ const (
 	E5
 )
 
-func testAutoFSM() {
+// drive fsm automatically.
+//
+//    | S0 | S1 | S2 | S3 | S4
+//----+----+----+----+----+----
+// S0 |    | E1 | E2 |    |
+// S1 |    |    |    | E3 | E4
+// S2 |    | E1 |    | E3 | E4
+// S3 |    |    |    |    |
+// S4 |    |    |    | E3 |
+//
+func TestAutoFSM(t *testing.T) {
 	sm := fsm.NewAutoFSM(S0)
 	defer sm.Close()
-  
+	
 	s0 := sm.ConfigState(S0)
-	s0.OnEnter(
-		ActionFunc(func() {
-			fmt.Println("enter S0")
-		}))
-	s0.OnExit(
-		ActionFunc(func() {
-			fmt.Println("exit S0")
-		}))
 	s0.Accept(E1, S1)
 	s0.Accept(E2, S2)
+	s0.OnExit(
+		fsm.ActionFunc(func() {
+			fmt.Println("exit S0")
+		}))
 
 	s1 := sm.ConfigState(S1)
 	s1.Accept(E3, S3)
 	s1.Accept(E4, S4)
 	s1.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S1")
 			sm.Feed(E3)
 		}))
-	s1.OnEnterFrom(S2, ActionFunc(func() {
+	s1.OnEnterFrom(S2, fsm.ActionFunc(func() {
 		fmt.Println("enter S1 from S2")
 		sm.Feed(E4)
 	}))
 
 	s3 := sm.ConfigState(S3)
 	s3.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S3")
 			fmt.Println("stop")
 			sm.Stop()
 		}))
-	s3.OnEnterFrom(S4, ActionFunc(func() {
+	s3.OnEnterFrom(S4, fsm.ActionFunc(func() {
 		fmt.Println("enter S3 from S4")
 		fmt.Println("stop")
 		sm.Stop()
@@ -70,7 +76,7 @@ func testAutoFSM() {
 	s2.Accept(E3, S3)
 	s2.Accept(E1, S1)
 	s2.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S2")
 			if rand.Int()%3 == 0 {
 				sm.Feed(E4)
@@ -84,11 +90,11 @@ func testAutoFSM() {
 	s4 := sm.ConfigState(S4)
 	s4.Accept(E3, S3)
 	s4.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S4")
 			sm.Feed(E3)
 		}))
-	s4.OnEnterFrom(S1, ActionFunc(func() {
+	s4.OnEnterFrom(S1, fsm.ActionFunc(func() {
 		fmt.Println("enter S4 from S1")
 		sm.Feed(E3)
 	}))
@@ -97,27 +103,26 @@ func testAutoFSM() {
 	sm.Start(E1)
 }
 
-func testStepFSM() {
+//
+// drive fsm step-by-step manually
+//
+func TestStepSFM(t *testing.T) {
 	type job struct {
-		fsm StepFSM
-		nev Event
+		fsm fsm.StepFSM
+		nev fsm.Event
 	}
 
 	jobQ := make(chan job, 1)
 
 	var j job
-	sm = fsm.NewStepFSM(S0)
+	sm := fsm.NewStepFSM(S0)
 	defer sm.Close()
 
 	j.fsm = sm
 
 	s0 := sm.ConfigState(S0)
-	s0.OnEnter(
-		ActionFunc(func() {
-			fmt.Println("enter S0") // never call S0.OnEnter Action
-		}))
 	s0.OnExit(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("exit S0")
 		}))
 	s0.Accept(E1, S1)
@@ -127,12 +132,12 @@ func testStepFSM() {
 	s1.Accept(E3, S3)
 	s1.Accept(E4, S4)
 	s1.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S1")
 			j.nev = E3
 			jobQ <- j
 		}))
-	s1.OnEnterFrom(S2, ActionFunc(func() {
+	s1.OnEnterFrom(S2, fsm.ActionFunc(func() {
 		fmt.Println("enter S1 from S2")
 		j.nev = E4
 		jobQ <- j
@@ -140,12 +145,12 @@ func testStepFSM() {
 
 	s3 := sm.ConfigState(S3)
 	s3.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S3")
 			fmt.Println("stop")
 			close(jobQ)
 		}))
-	s3.OnEnterFrom(S4, ActionFunc(func() {
+	s3.OnEnterFrom(S4, fsm.ActionFunc(func() {
 		fmt.Println("enter S3 from S4")
 		fmt.Println("stop")
 		close(jobQ)
@@ -156,7 +161,7 @@ func testStepFSM() {
 	s2.Accept(E3, S3)
 	s2.Accept(E1, S1)
 	s2.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S2")
 			if rand.Int()%3 == 0 {
 				j.nev = E4
@@ -173,12 +178,12 @@ func testStepFSM() {
 	s4 := sm.ConfigState(S4)
 	s4.Accept(E3, S3)
 	s4.OnEnter(
-		ActionFunc(func() {
+		fsm.ActionFunc(func() {
 			fmt.Println("enter S4")
 			j.nev = E3
 			jobQ <- j
 		}))
-	s4.OnEnterFrom(S1, ActionFunc(func() {
+	s4.OnEnterFrom(S1, fsm.ActionFunc(func() {
 		fmt.Println("enter S4 from S1")
 		j.nev = E3
 		jobQ <- j
