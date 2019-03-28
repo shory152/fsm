@@ -7,7 +7,7 @@ sample:
 import "github.com/shory152/fsm"
 
 const (
-	S0 State = iota
+	S0 fsm.State = iota
 	S1
 	S2
 	S3
@@ -15,7 +15,7 @@ const (
 	S5
 )
 const (
-	E0 Event = iota
+	E0 fsm.Event = iota
 	E1
 	E2
 	E3
@@ -25,7 +25,7 @@ const (
 
 func testAutoFSM() {
 	sm := fsm.NewAutoFSM(S0)
-  defer sm.Close()
+	defer sm.Close()
   
 	s0 := sm.ConfigState(S0)
 	s0.OnEnter(
@@ -107,7 +107,7 @@ func testStepFSM() {
 
 	var j job
 	sm = fsm.NewStepFSM(S0)
-  defer sm.Close()
+	defer sm.Close()
 
 	j.fsm = sm
 
