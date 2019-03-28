@@ -558,13 +558,13 @@ func TestParseXML(t *testing.T) {
 		
 		 大 道 中 国 </name>
 		<price> 89.00 </price>
-		<arthor>张大中</arthor>
+		<author>张大中</arthor>
 	</book>
 	
 	<book>
 		<name>小猪唏哩呼噜</name>
 		<price>22.50</price>
-		<arthor>Alex</arthor>
+		<author>Alex</arthor>
 	</book>
 </books>
 `

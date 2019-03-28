@@ -31,7 +31,6 @@ type interState struct {
 	enterAction Action
 	enterFrom   map[State]Action
 	exitAction  Action
-	exitFrom    map[State]Action
 	next        map[Event]*interState
 	fsm         *stateMachine
 }
@@ -39,6 +38,9 @@ type interState struct {
 // this state accept e, then transfer to nextS
 func (is *interState) Accept(e Event, nextS State) ConfigState {
 	nis := is.fsm.ConfigState(nextS)
+	if is.next == nil {
+		is.next = make(map[Event]*interState)
+	}
 	is.next[e] = nis.(*interState)
 	return is
 }
@@ -64,12 +66,14 @@ func (is *interState) OnExit(act Action) ConfigState {
 	return is
 }
 
+// fsm which be driven step-by-step
 type StepFSM interface {
 	ConfigState(State) ConfigState
 	Step(Event)
 	Close()
 }
 
+// fsm which receive the first event, then run automatically.
 type AutoFSM interface {
 	ConfigState(State) ConfigState
 	Feed(Event)
@@ -86,10 +90,9 @@ type stateMachine struct {
 
 func newStateMachine(startState State) *stateMachine {
 	fsm := &stateMachine{}
-	fsm.chEvent = make(chan Event, 1)
 	fsm.states = make(map[State]*interState)
 	fsm.currentState = startState
-	fsm.ConfigState(startState)
+	//fsm.ConfigState(startState)
 	return fsm
 }
 
@@ -98,7 +101,9 @@ func NewStepFSM(startState State) StepFSM {
 }
 
 func NewAutoFSM(startState State) AutoFSM {
-	return newStateMachine(startState)
+	fsm := newStateMachine(startState)
+	fsm.chEvent = make(chan Event, 1)
+	return fsm
 }
 
 func (fsm *stateMachine) ConfigState(s State) ConfigState {
@@ -108,7 +113,6 @@ func (fsm *stateMachine) ConfigState(s State) ConfigState {
 		ss = &interState{}
 		ss.id = s
 		ss.fsm = fsm
-		ss.next = make(map[Event]*interState)
 		fsm.states[s] = ss
 		return ss
 	}
@@ -159,9 +163,18 @@ func (fsm *stateMachine) Feed(e Event) {
 
 // stop fsm from auto run
 func (fsm *stateMachine) Stop() {
-	close(fsm.chEvent)
+	if fsm.chEvent != nil {
+		close(fsm.chEvent)
+		fsm.chEvent = nil
+	}
 }
 
 func (fsm *stateMachine) Close() {
-
+	fsm.Stop()
+	for _, v := range fsm.states {
+		v.enterFrom = nil
+		v.next = nil
+	}
+	fsm.states = nil
+	fsm.currentState = 0
 }
