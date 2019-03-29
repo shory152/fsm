@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	_ int = iota
-	XML_TAG_OPTN
-	XML_TAG_CLOSE
-	XML_TEXT
+	_             int = iota
+	XML_TAG_OPTN      // <name>
+	XML_TEXT          // between openTag and closeTag
+	XML_TAG_CLOSE     // </name>
+	XML_HEAD          // <?xml ...?>
+	XML_COMMENT       // <!-- ... -->
 )
 
 type XmlToken struct {

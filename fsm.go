@@ -24,6 +24,7 @@ type ConfigState interface {
 	OnEnter(a Action) ConfigState
 	OnEnterFrom(prev State, a Action) ConfigState
 	OnExit(a Action) ConfigState
+	OnExitEvent(e Event, a Action) ConfigState
 }
 
 type interState struct {
@@ -31,6 +32,7 @@ type interState struct {
 	enterAction Action
 	enterFrom   map[State]Action
 	exitAction  Action
+	exitFrom    map[Event]Action
 	next        map[Event]*interState
 	fsm         *stateMachine
 }
@@ -63,6 +65,12 @@ func (is *interState) OnEnterFrom(prev State, act Action) ConfigState {
 // execute act when exit this state
 func (is *interState) OnExit(act Action) ConfigState {
 	is.exitAction = act
+	return is
+}
+
+// execute act when exit this state triggered by Event e
+func (is *interState) OnExitEvent(e Event, act Action) ConfigState {
+	is.exitFrom[e] = act
 	return is
 }
 
@@ -159,7 +167,9 @@ func (fsm *stateMachine) Step(ev Event) {
 		panic("can not accept the event")
 	} else {
 		// exit current state
-		if currentState.exitAction != nil {
+		if currentState.exitFrom != nil && currentState.exitFrom[ev] != nil {
+			currentState.exitFrom[ev].Do()
+		} else if currentState.exitAction != nil {
 			currentState.exitAction.Do()
 		}
 
